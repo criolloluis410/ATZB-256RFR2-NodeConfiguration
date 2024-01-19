@@ -1,117 +1,108 @@
 #include "usr_wireless.h"
 #include "wireless_config.h"
 #include "math.h"
-#include "periodic_timer.h"// Permite utilizar temporizadores.
-// Datos Compartidos
-uint16_t ID_DEFAULT;
-// Datos de Subida
-uint16_t ID_S;// Almacena la direcion fuente o origen (source) del dispositivo  
-uint8_t NB[4];// Nivel de bateria del dispositivo
-strc_NS listaNS[7];// Lista con niveles de senal de los nodos proximos, la cantidad de elementos no deberia exeder del numero de nodos
-int longitudListaNS=0;// Contiene la cantidad de niveles de energia almacenados en el nodo
-int cont_NS=0;// Ayuda a agregar nuevos valores de niveles de energia recibidos 
-uint16_t SRC_ADDR_;// Variable para modificar la direccion fuente desde el codigo principal
+#include "periodic_timer.h"
+///////////////  Variables used in uplink.  //////////////////////////////////////
+uint16_t ID_S;// Stores the source address of the device.  
+uint8_t NB[4];// Stores the battery level of the device.
+strc_NS listNS[7];// List with signal levels of nearby nodes.
+int DatosNSIniciales=0; //Allows to start or restart the list with signal level values.
+int cargarDir=0;//Helps to load the destination address to be used by the node for the initial default route.
+uint16_t ID_DEFAULT; // Stores default identifier.
+uint16_t SRC_ADDR_;// Variable to modify the source address from the main code.
+int iniTx=0;// Helps to control the sending of an uplink frame.
+// Variables used to add new values of received energy levels. 
+int lengListNS=0;
+int cont_NS=0; 
 int longitudTramaRX=0; 
- 
-// Datos de Bajada
-uint8_t IDS_TRAMAS[20]; // Lista de identidicadores de tramas enviadas por el PC, la cantidad de elementos no deberia exeder del numero de nodos
-int longitud_IDTramas=0;// Ayuda a agregar nuevos identidicadores de tramas enviados por el PC
-int ctrReTX=0; // 
-int tiempoTX=0; //
-//uint16_t ID_DEFAULT_NUEVO;// Almacena el nuevo identificador por defecto
-
-// Control adicional
-//int count_1=0; //
-int iniTx=0;// Permite enviar una trama de subida
-int DatosNSIniciales=0; // Ayuda a cargar datos iniciales de nivel de señal???????
-int cargarDir=0;// // Ayuda a cargar la direcion por defecto inicial
-tiempoDuracionTimer=0;//Variable para asignar la duraci�n del temporizador de un estado especifico
-//int agregarTimer=0;//Variable para activar el temporizador cuando sea necesario
-TimerFinaliza=0;// Variable para indicar que el tiempo del temporizador finalizo
-//Variable de pruebas
-int crtfor=0;
+////////////////  Variables used in downlink.  ///////////////////////////////////
+uint8_t IDS_FRAMES[20]; // List of frame identifiers sent by the PC.
+int longitud_IDTramas=0;// Helps to add new frame identifiers sent by the PC.
+int ctrReTX=0; // Helps to control the sending of an downlink frame.
+tiempoDuracionTimer=0;// Variable to assign the duration of the timer used to send broadcast.
+////////////////  Additional control /////////////////////////////////////////////
+TimerFinaliza=0;//
 int ctrtem=0;
-int contUltimaTX=0;
-uint8_t listacrtfor[1];
-//// Funciones para comvercion de numeros flotantes /////////////////////////////////////////////////////////////////////////////////////////
+////////////////  Floating Number Conversion Functions  //////////////////////////
 void reverse(char* str, int len);
 int intToStr(int x, char str[], int d);
 void ftoa(float n, char* res, int afterpoint);
 
 void usr_wireless_app_task(void)
 {
-
-	SRC_ADDR_=0x0001;// Identificador de direccion fuente(source)
+	////////////////  Load initial source address. //////////////////////////
+	SRC_ADDR_=0x0001;
 	SRC_ADDR_ = CCPU_ENDIAN_TO_LE16(SRC_ADDR_);
-	tal_pib_set(macShortAddress, (pib_value_t *)&SRC_ADDR_);// Asignacon de direccion fuente
-	ID_S=SRC_ADDR_; // Almacenamiento de direccion fuente previamente asignada
+	tal_pib_set(macShortAddress, (pib_value_t *)&SRC_ADDR_);
+	ID_S=SRC_ADDR_; //
+	////////////////  Load initial destination address. //////////////////////////
 	if (cargarDir==0)
 	{
-		DST_ADDR_=0x0002;// Almacenamiento del identificador para alcanzar al siguiente nodo, se ingresa un valor inicial.
+		DST_ADDR_=0x0002;
 		ID_DEFAULT=DST_ADDR_;
 		cargarDir=1;
 	}
-	//Datos Iniciales 
+	////////////////  Initialize storage of signal levels. //////////////////////////
 	if (DatosNSIniciales==0)
 	{
-		longitudListaNS=1;	
+		lengListNS=1;	
 	}
-
+	////////////////  Receive signal from node pushbutton.  //////////////////////////
 	if (!ioport_get_pin_level(GPIO_PUSH_BUTTON_0))
 	{
-		delay_ms(100); //Retardo para que funcione el pulsador
-		LED_Toggle(LED2);
-		longitudListaNS=cont_NS;//Cambia de valor cuando es deshabilitado el if anterior
-		//longitudListaNS=7;
-		iniTx=1;
-		// Obtener nivel de Bateria ////////////////////////////////////////////////////////////
-		char charBateria[20]; // Almacena el nivel de la bateria comvertido en una cadena de caracteres
-		float floatBateria=get_bat_sensor_data();// Obtiene en nivel de bateria
-		ftoa(floatBateria, charBateria, 4);// Combierte el nivel de bateria de float a una cadena de caracteres hexadecimales
-		NB[0]=(uint8_t)charBateria[0];// almacena los cuatro primeros valores de la cadena en el vector NB
+		delay_ms(100);
+		////////////////// Get battery level. ///////////////////////////////
+		char charBateria[20]; 
+		float floatBateria=get_bat_sensor_data();
+		ftoa(floatBateria, charBateria, 4);
+		NB[0]=(uint8_t)charBateria[0];
 		NB[1]=(uint8_t)charBateria[1];
 		NB[2]=(uint8_t)charBateria[2];
 		NB[3]=(uint8_t)charBateria[3];	
+		////////////////// Initialize next conditional. ///////////////////////////////
+		LED_Toggle(LED2);
+		lengListNS=cont_NS;
+		iniTx=1;
 	}
+	///////////////////// Build uplink frame to be sent.  /////////////////////
 	else if (iniTx==1)
-	{ 	/////////////////////////// Construccion de la trama de subida a ser enviada  ///////////////////////////////////////////////
+	{ 	
 		iniTx=0;
-		//count_1=1;
 		int indice=0;
-		uint8_t TRAMA[50];//Trama de subida
-		//-------IDENTIFICADOR FUENTE---------------------------------------//
+		uint8_t TRAMA[50];// Uplink  frame.
+		//-------SOURCE IDENTIFIER (ID_S)---------------------------------------//
 		TRAMA[0]=(uint8_t)(ID_S >> 8);
 		TRAMA[1]=(uint8_t)ID_S;
-		//-------NIVEL DE BATERIA-------------------------------------------//	
+		//-------BATTERY LEVEL (NB)-------------------------------------------//	
 		TRAMA[2]=NB[0];
 		TRAMA[3]=NB[1];
 		TRAMA[4]=NB[2];		
 		TRAMA[5]=NB[3];	
 			
-		for (int i=0; i<longitudListaNS; i++)
+		for (int i=0; i<lengListNS; i++)
 		{	
-		//-------NIVEL DE SEÑAL--------------------------------------------//
-			TRAMA[indice+6]=(uint8_t)(listaNS[i].NS >> 8);
-			TRAMA[indice+7]=(uint8_t)listaNS[i].NS;
-		//-------IDENTIFICADOR DEL NIVEL DE SE�AL--------------------------//
-			TRAMA[indice+8]=(uint8_t)(listaNS[i].ID_DIR_NS >> 8);
-			TRAMA[indice+9]=(uint8_t)listaNS[i].ID_DIR_NS;
+		//------- SIGNAL LEVEL (NS)--------------------------------------------//
+			TRAMA[indice+6]=(uint8_t)(listNS[i].NS >> 8);
+			TRAMA[indice+7]=(uint8_t)listNS[i].NS;
+		//-------SIGNAL LEVEL IDENTIFIER (ID_NS)--------------------------//
+			TRAMA[indice+8]=(uint8_t)(listNS[i].ID_DIR_NS >> 8);
+			TRAMA[indice+9]=(uint8_t)listNS[i].ID_DIR_NS;
 			
 			indice=indice+4;
 		}
-		TRAMA[(longitudListaNS*4)+6]=0xFE;// CH de parada
+		//////////////////  Transmission of the uplink frame. ////////////////////////////
+		TRAMA[(lengListNS*4)+6]=0xFE;
 		DST_ADDR_=ID_DEFAULT;
-		transmit_sample_frame(TRAMA, (longitudListaNS*4)+7);	
-	
-		//crtfor=0;
+		transmit_sample_frame(TRAMA, (lengListNS*4)+7);	
 	}
-	//////////////////////////////////////////////////////////////////////////////
+	//////////////////  Re-transmission of the uplink frame. ////////////////////////////
 	if (ctrReTX==1)
 	{
 		DST_ADDR_=ID_DEFAULT;		
 		transmit_sample_frame(trama_recibida.CargaUtil_802_15_4, longitudTramaRX);
 		ctrReTX=0;
 	} 
+	//////////////////  Timer configuration. ////////////////////////////////////////////////////////////
 	if (ctrReTX==2)
 	{
 		int tiempo=(int)SRC_ADDR_;
@@ -121,28 +112,26 @@ void usr_wireless_app_task(void)
 		ctrtem=1;	
 		ctrReTX=0;
 	}
+	//////////////////  Dowlink frame retransmission (Broadcast). (Broadcast) ///////////////////////////
 	if (TimerFinaliza==1 && ctrtem==1)
 	{
 		TimerFinaliza=0;
 		ctrtem=0;
 		stop_timer1();
-		DST_ADDR_=0xFFFF;/* siguiente salto */
+		DST_ADDR_=0xFFFF;
 		transmit_sample_frame(trama_recibida.CargaUtil_802_15_4, 5);
 	}
-
 	delay_ms(10);
 }
 
 void usr_frame_received_cb(frame_info_t *frame)
 {		
-		memset(&trama_recibida,0,sizeof(trama_recibida));// Elimina informacion previa de la estructura de recepcion 
-		memcpy(&trama_recibida,frame->mpdu,sizeof(trama_recibida));// copia la informacion de la memoria fuente(buffer) al detino
-		//bmm_buffer_free(frame->buffer_header);//Elimina los datos del buffer, evita superpocicion.
-			
-		if (trama_recibida.d_dstn==SRC_ADDR_) // Si se cumple esta condicion la trama es de subida
+		//////////////////  Frame reception.  ////////////////////////////////////////////////////////////
+		memset(&trama_recibida,0,sizeof(trama_recibida));
+		memcpy(&trama_recibida,frame->mpdu,sizeof(trama_recibida));
+		//////////////////  Condidicon to identify an uplink frame. /////////////////////////////////////	
+		if (trama_recibida.d_dstn==SRC_ADDR_)
 		{
-			// Obtencion de la longitud de la trama 
-			//int longitudTramaRX=0;
 			longitudTramaRX=0;  
 			for (int l = 0; l < 50; l++)
 			{
@@ -152,89 +141,78 @@ void usr_frame_received_cb(frame_info_t *frame)
 					longitudTramaRX=l+1;
 				}
 			}
-			//Re-transmision de la trama recibida atraves de la ID_DEFAULT
 			ctrReTX=1;
-			//transmit_sample_frame(trama_recibida.CargaUtil_802_15_4, longitudTramaRX);	
 		}
-		else if(trama_recibida.d_dstn==0xFFFF) // Si se cumple esta condicion la trama es de bajada		
+		//////////////////  Condidiconical to identify a dowlink frame.  ///////////////////////////////
+		else if(trama_recibida.d_dstn==0xFFFF) 	
 		{	
-			// Almacenar Niveles de Energia ////////////////////////////////////////////////////////////
+			////////////////////////// Energy Level Storage. ///////////////////////////////////////
 			int coincedencia_ID_NS=0;
-			//int longitudListaNS_1=sizeof(listaNS);
 			int longitudListaNS_1=7;
 			LED_Toggle(LED0);
-			// Berificar que el Nivel de energia no ha sido almacenado previamente  
+			///////////// Verify that the Energy Level has not been previously stored. ///////////// 
 			for (int i=0; i<longitudListaNS_1; i++)
 			{
-				if (listaNS[i].ID_DIR_NS==trama_recibida.d_orgn)
+				if (listNS[i].ID_DIR_NS==trama_recibida.d_orgn)
 				{
-					//crtfor++;
-					coincedencia_ID_NS=1;// Si esta condicion se cumple, el NS de la trama rx ya se enuentra en la lista de niveles de energia
-					//LED_Toggle(LED1);// 
+					coincedencia_ID_NS=1;
 				}
 			}
-			if (coincedencia_ID_NS==0)// Si esta condicion se cumple, el NS de la trama rx se debe extraer del buffer y almacenarlo  
+			/////////////// Energy level extraction and aggregation. ///////////////////////////////////
+			if (coincedencia_ID_NS==0)
 			{
-				// Extraccion del nivel de energia
 				uint8_t *payload_ptr=frame->mpdu;
 				uint8_t mpdu_len =payload_ptr[0]+2;
 				uint8_t potencia_trama=payload_ptr[mpdu_len];
-				//Agregacion de nuevos datos de NS
 				LED_Toggle(LED2);
-				listaNS[cont_NS].NS=potencia_trama;
-				listaNS[cont_NS].ID_DIR_NS=trama_recibida.d_orgn;
+				listNS[cont_NS].NS=potencia_trama;
+				listNS[cont_NS].ID_DIR_NS=trama_recibida.d_orgn;
 				cont_NS++;
 				DatosNSIniciales=1;			
 			}
-			//Extraccion de la direccion de destino final( ID_DF) de la trama de bajada
+			//////////////////  Extraction of the final destination identifier.  ///////////////////////////////
 			uint8_t DF1=trama_recibida.CargaUtil_802_15_4[0];
 			uint8_t DF2=trama_recibida.CargaUtil_802_15_4[1];
-			//Combinacion de los dos primeros bytes para obtener una dirreccion 
 			uint16_t ID_DF;
-			ID_DF=DF1*0x100;// Se recorren 8 bits a la izquierda
-			ID_DF=ID_DF+DF2; //Se completan los bits restantes
-			
-			if (ID_S==ID_DF) //Se comprueba que la direccion de destino final pertenece al nodo o no
+			ID_DF=DF1*0x100;
+			ID_DF=ID_DF+DF2; 
+			/////////////////// Configuration of new default identifier. /////////////////////////////
+			if (ID_S==ID_DF) 
 			{				
-				// Nueva Direccion por Defecto ID_DEFAULT almacenada en una trama de bajada
 				uint8_t ID_DEFAULT_Rx1 = trama_recibida.CargaUtil_802_15_4[2];
 				uint8_t ID_DEFAULT_Rx2 = trama_recibida.CargaUtil_802_15_4[3];	
-				uint16_t ID_DEFAULT_NUEVO;// Almacena el nuevo identificador por defecto			
-				ID_DEFAULT_NUEVO=ID_DEFAULT_Rx1*0x100;// Se recorren 8 bits a la izquierda
-				ID_DEFAULT_NUEVO=ID_DEFAULT_NUEVO+ID_DEFAULT_Rx2;// Se completan los bits restantes
-				// Agregacion del nuevo identificador por defecto
+				uint16_t ID_DEFAULT_NUEVO;		
+				ID_DEFAULT_NUEVO=ID_DEFAULT_Rx1*0x100;
+				ID_DEFAULT_NUEVO=ID_DEFAULT_NUEVO+ID_DEFAULT_Rx2;
 				ID_DEFAULT=ID_DEFAULT_NUEVO;
-				//cargarDir=1;// Inavilita la asignacion de ID_DEF desde la funcion principal
 			}
-			// Prevencion de bucles
+			///////////////////// Preventing loops by broadcast transmission.  /////////////////////////////	
 			int coincedencia_IDTrama=0;
 			uint8_t idTramaRx=trama_recibida.CargaUtil_802_15_4[4];
 			for(int i=0; i<=longitud_IDTramas; i++)
 			{
-				if (IDS_TRAMAS[i]==idTramaRx)
+				if (IDS_FRAMES[i]==idTramaRx)
 				{
-					coincedencia_IDTrama=1;// Indica que se encontro el ID_FRAME 
+					coincedencia_IDTrama=1;
 				}					
 			}
 			if (coincedencia_IDTrama==0)
 			{
-				IDS_TRAMAS[longitud_IDTramas]=idTramaRx;// Se agrega un nuevo Identificador
-				//Re-transmision bajada
-				//transmit_sample_frame(trama_recibida.CargaUtil_802_15_4, 5);	
+				IDS_FRAMES[longitud_IDTramas]=idTramaRx;
 				ctrReTX=2;
 				longitud_IDTramas++;
 			}				
 		}
+		///////////////////////  Remove data from the receive buffer. /////////////////////////////////////
 		delay_ms(0);
-		bmm_buffer_free(frame->buffer_header);//Elimina los datos del buffer, evita superpocicion.
+		bmm_buffer_free(frame->buffer_header);
 }
 
 void usr_frame_transmitted_cb(retval_t status, frame_info_t *frame)
 {
 
 }
-///////////////////////////////////////////////////////////////////////////////////
-
+// Combine a number into a string of chars.
 void reverse(char* str, int len)
 {
 	int i = 0, j = len - 1, temp;
@@ -254,9 +232,6 @@ int intToStr(int x, char str[], int d)
 		str[i++] = (x % 10) + '0';
 		x = x / 10;
 	}
-	
-	// If number of digits required is more, then
-	// add 0s at the beginning
 	while (i < d)
 	str[i++] = '0';
 	
@@ -264,31 +239,20 @@ int intToStr(int x, char str[], int d)
 	str[i] = '\0';
 	return i;
 }
-
+	// convert integer part to string
 void ftoa(float n, char* res, int afterpoint)
 {
-	// Extract integer part
 	int ipart = (int)n;
-	
-	// Extract floating part
 	float fpart = n - (float)ipart;
-	
-	// convert integer part to string
 	int i = intToStr(ipart, res, 0);
-	
-	// check for display option after point
 	if (afterpoint != 0) {
 		res[i] = '.'; // add dot
-		
-		// Get the value of fraction part upto given no.
-		// of points after dot. The third parameter
-		// is needed to handle cases like 233.007
 		fpart = fpart * pow(10, afterpoint);
 		
 		intToStr((int)fpart, res + i + 1, afterpoint);
 	}
 }
-////////////////////////////////////////////////////////////////////////////////////7
+///////////////// Functions that get the battery level of the node. ///////////////////////////////////////////////////////////////////7
 float get_bat_sensor_data(void)
 {
 	float bat_voltage;
