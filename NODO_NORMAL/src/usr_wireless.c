@@ -4,7 +4,6 @@
 #include "periodic_timer.h"// Permite utilizar temporizadores.
 // Datos Compartidos
 uint16_t ID_DEFAULT;
-
 // Datos de Subida
 uint16_t ID_S;// Almacena la direcion fuente o origen (source) del dispositivo  
 uint8_t NB[4];// Nivel de bateria del dispositivo
@@ -60,7 +59,8 @@ void usr_wireless_app_task(void)
 
 	if (!ioport_get_pin_level(GPIO_PUSH_BUTTON_0))
 	{
-		delay_ms(10); //Retardo para que funcione el pulsador
+		delay_ms(100); //Retardo para que funcione el pulsador
+		LED_Toggle(LED2);
 		longitudListaNS=cont_NS;//Cambia de valor cuando es deshabilitado el if anterior
 		//longitudListaNS=7;
 		iniTx=1;
@@ -314,72 +314,9 @@ float reverse_float( const float float_val )
 	#endif
 }
 
-/* Converts milli Volt into Volt*/
+// Converts milli Volt into Volt
 float convert_mv_to_v(uint16_t float_val)
 {
 	return (float_val * (1.0/1000));
 }
 
-////////////////////////////////////////////////////////////////////////////////////////
-/*
-uint8_t Digit[10][8] =
-{
-{ 1,1,1,1,1,1,0,0 },    // 0
-{ 0,1,1,0,0,0,0,0 },    // 1
-{ 1,1,0,1,1,0,1,0 },    // 2
-{ 1,1,1,1,0,0,1,0 },    // 3
-{ 0,0,1,0,0,1,1,0 },    // 4
-{ 1,0,1,1,0,1,1,0 },    // 5
-{ 1,0,1,1,1,1,1,0 },    // 6
-{ 1,1,1,0,0,0,0,0 },    // 7
-{ 1,1,1,1,1,1,1,0 },    // 8
-{ 1,1,1,0,0,1,1,0 }     // 9
-};*/
-	////////////////////////////segunda forma //////////////////////////////////////////////
-	/*int contadorDeEnvio=longitudListaNS;
-	int indice2=0;
-	if (indice2<longitudListaNS)
-	{
-		if (indice2<longitudListaNS-1){
-			
-			uint8_t TRAMA[9]={
-				(uint8_t)(ID_S >> 8), (uint8_t)ID_S, 
-				(uint8_t)(NB >> 8), (uint8_t)NB, 
-				(uint8_t)(listaNS[indice2].NS >> 8), (uint8_t)listaNS[indice2].NS, 
-				(uint8_t)(listaNS[indice2].ID_NS >> 8), (uint8_t)listaNS[indice2].ID_NS,
-				'\n'};
-			transmit_sample_frame(TRAMA, 9);
-		}
-		else if(indice2==longitudListaNS-1){
-			
-			uint8_t TRAMA[10]={
-				(uint8_t)(ID_S >> 8), (uint8_t)ID_S,
-				(uint8_t)(NB >> 8), (uint8_t)NB,
-				(uint8_t)(listaNS[indice2].NS >> 8), (uint8_t)listaNS[indice2].NS,
-				(uint8_t)(listaNS[indice2].ID_NS >> 8), (uint8_t)listaNS[indice2].ID_NS,
-				'\n',0xFE};
-			transmit_sample_frame(TRAMA, 10);
-		}
-		delay_ms(200); //Retardo para que funcione el pulsador
-		indice2++;		
-	}*/
-	//////////////////////////////////////////////////////////////////////////
-	////////////////////pruebas///////////////////////////////////////////////
-				/////////////////////////////////////////////////////////////////
-				//LED_Toggle(LED0);
-				//DST_ADDR_=0xFFFF;/* siguiente salto */
-				//trama_recibida.CargaUtil_802_15_4[5]=(uint8_t)(trama_recibida.d_orgn >> 8);
-				//trama_recibida.CargaUtil_802_15_4[6]=(uint8_t)trama_recibida.d_orgn;
-				//trama_recibida.CargaUtil_802_15_4[7]=coincedencia_ID_NS;
-				//trama_recibida.CargaUtil_802_15_4[8]=longitudListaNS_1;
-				//trama_recibida.CargaUtil_802_15_4[9]=(uint8_t)(listaNS[0].ID_DIR_NS>> 8);
-				//trama_recibida.CargaUtil_802_15_4[10]=(uint8_t)listaNS[0].ID_DIR_NS;
-				//
-				//trama_recibida.CargaUtil_802_15_4[11]=(uint8_t)(listaNS[1].ID_DIR_NS>> 8);
-				//trama_recibida.CargaUtil_802_15_4[12]=(uint8_t)listaNS[1].ID_DIR_NS;
-//
-				//trama_recibida.CargaUtil_802_15_4[13]=(uint8_t)(listaNS[2].ID_DIR_NS>> 8);
-				//trama_recibida.CargaUtil_802_15_4[14]=(uint8_t)listaNS[2].ID_DIR_NS;
-				//transmit_sample_frame(trama_recibida.CargaUtil_802_15_4, 15);
-				//delay_ms(0);
-				//////////////////////////////////////////////////////////////////
